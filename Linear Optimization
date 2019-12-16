@@ -1,0 +1,339 @@
+m <- c()
+n <- c()
+obj.coeff <- c()
+const.matrix <- matrix()
+const.signs <- c()
+rhs.orig <- c()
+final.tab <- matrix()
+
+# m <- 2
+# n <- 3
+# obj.coeff <- c(3, 5)
+# const.matrix <- matrix(nrow = n, ncol = m, byrow = TRUE, data =
+#                          c(1, 0,
+#                            0, 2,
+#                            3, 2)
+#                        )
+# const.signs <- c("<=", "<=", "<=")
+# rhs.orig <- c(4, 12, 18)
+
+# m <- 3
+# n <- 3
+# obj.coeff <- c(1, 2, 2)
+# const.matrix <- matrix(nrow = n, ncol = m, byrow = TRUE, data =
+#                          c(5, 2, 3,
+#                            1, 4, 2,
+#                            2, 0, 1)
+# )
+# const.signs <- c("<=", "<=", "<=")
+# rhs.orig <- c(15, 12, 8)
+
+# m <- 2
+# n <- 3
+# obj.coeff <- c(-0.4, -0.5)
+# const.matrix <- matrix(nrow = n, ncol = m, byrow = TRUE, data =
+#                          c(0.3, 0.1,
+#                            0.5, 0.5,
+#                            0.6, 0.4)
+#                        )
+# const.signs <- c("<=", "=", ">=")
+# rhs.orig <- c(2.7, 6, 6)
+
+# m <- 2
+# n <- 3
+# obj.coeff <- c(1, 1)
+# const.matrix <- matrix(nrow = n, ncol = m, byrow = TRUE, data =
+#                          c(1, 2,
+#                            3, 2,
+#                            1, 3)
+# )
+# const.signs <- c("<=", "<=", ">=")
+# rhs.orig <- c(8, 12, 13)
+
+
+inputLinearProgram <- function(){
+  print("Enter the number of decision variables:")
+  m <<- as.numeric(readline())
+  print("Enter the number of constraints:")
+  n <<- as.numeric(readline())
+  print("Enter the objective function coefficients:")
+  for(i in 1:m){
+    print(paste0("Enter the coefficient of x", i))
+    obj.coeff[i] <<- as.numeric(readline())
+  }
+  const.matrix <<- matrix(nrow = n, ncol = m)
+  for(i in 1:n){
+    print(paste("Enter the constraint", i))
+    for(j in 1:m){
+      print(paste0("Enter the coefficient of x", j))
+      const.matrix[i, j] <<- as.numeric(readline())
+    }
+    print(paste("Enter the sign of constraint", i))
+    const.signs[i] <<- readline()
+    print(paste("Enter the rhs of constraint", i))
+    rhs.orig[i] <<- as.numeric(readline())
+  }
+}
+
+inputLinearProgram()
+
+for(i in 1:n){
+  if(rhs.orig[i] < 0){
+    rhs.orig[i] <- -rhs.orig[i]
+    const.matrix[i, ] <- -const.matrix[i, ]
+    if(const.signs[i] == "<="){
+      const.signs[i] = ">="
+    }
+    if(const.signs[i] == ">="){
+      const.signs[i] = "<="
+    }
+  }
+}
+
+conventionalSimplex <- function(m, n, obj.coeff, const.matrix, rhs){
+  tab <- rbind(-obj.coeff, const.matrix)
+  tab <- cbind(tab, rbind(rep(0, m), diag(n)))
+  tab <- cbind(tab, c(0, rhs))
+  basic.index <- seq(m + 1, m+n)
+  nonbasic.index <- seq(1, m)
+  rownames(tab) <- c("Z", paste0("x", basic.index))
+  colnames(tab) <- c(paste0("x",1:(ncol(tab) - 1)), "RHS")
+  print("The initial tableau is:")
+  print(tab)
+  obj.row <- tab[1, 1:(m+n)]
+  unbounded.flag <- 0
+  mult.optima.flag <- 0
+  while(sum(obj.row < 0) > 0){
+    piv.col.index <- which(obj.row == min(obj.row))[1]
+    piv.col <- tab[2:(n+1), piv.col.index]
+    rhs <- tab[2:(n+1), m+n+1]
+    min.ratio.vect <- ifelse(
+      piv.col > 0,
+      rhs/piv.col,
+      10^10
+    )
+    if(min(min.ratio.vect) == 10^10){
+      unbounded.flag <- 1
+      break
+    }
+    if(length(which(min.ratio.vect == min(min.ratio.vect))) > 1){
+      print("DEGENERACY")
+    }
+    piv.row.index <- which(min.ratio.vect == min(min.ratio.vect))[1] + 1
+    piv.element <- tab[piv.row.index, piv.col.index]
+    tab[piv.row.index, ] <- tab[piv.row.index, ]/ piv.element
+    rest.row.index <- (1:(n + 1))[-piv.row.index]
+    for(i in rest.row.index){
+      tab[i, ] <- tab[i, ] - tab[i, piv.col.index]*tab[piv.row.index, ]
+    }
+    obj.row <- tab[1, 1:(m+n)]
+    basic.index[piv.row.index-1] <- piv.col.index
+    nonbasic.index <- (1:(m+n))[-basic.index]
+  }
+  final.tab <<- tab
+  rownames(tab) <- c("Z", paste0("x", basic.index))
+  colnames(tab) <- c(paste0("x", 1:(m+n)),"RHS")
+  if(unbounded.flag == 1){
+    print("UNBOUNDED")
+  }
+  else{
+    if(length(which(obj.row[nonbasic.index] == 0)) > 0){
+      print("MULTIPLE OPTIMA")
+      print("The final tableau is:")
+      print(tab)
+    }
+    else{
+      print("The final tableau is:")
+      print(tab)
+    }
+  }
+  if(unbounded.flag == 0){
+    soln <- rep(0, (m+n))
+    soln[basic.index] <- tab[2:(n+1), (m+n+1)]
+    soln[nonbasic.index] <- 0
+    names(soln) <- paste0("x", 1:(ncol(tab) - 1))
+    print("The optimal objective value is:")
+    print(tab[1, (m+n+1)])
+    print("The optimal solution is:")
+    print(soln)
+    print("The basic variables are:")
+    print(paste0("x", basic.index))
+    print("The non-basic variables are:")
+    print(paste0("x", nonbasic.index))
+    print("The dual optimal solutions are:")
+    print(tab[1, (m+1):(m+n)])
+    shadow.price <- matrix(nrow = n, ncol = 5)
+    for(i in 1:n){
+      vect <- tab[2:(n+1), (m+n+1)]/tab[2:(n+1), (m+i)]
+      lower <- max(vect[tab[2:(n+1), (m+i)] < 0], na.rm = T)
+      upper <- min(vect[tab[2:(n+1), (m+i)] > 0], na.rm = T)
+      shadow.price[i, 1] <- paste("Constraint", i)
+      shadow.price[i, 3] <- abs(lower) 
+      shadow.price[i, 4] <- upper 
+    }
+    shadow.price[, 2] <- tab[1, (m+1):(m+n)]
+    shadow.price[, 5] <- ifelse(const.matrix %*% soln[1:m] - rhs.orig == 0, "Binding", "Non-binding")
+    colnames(shadow.price) <- c("Constraint", "Shadow price", "Allowable increase", "Allowable decrease", "Binding?")
+    print(shadow.price)
+    cost.coeff.sens <- matrix(ncol = 3, nrow = 0)
+    colnames(cost.coeff.sens) <- c("Variable", "Allowable decrease", "Allowable increase")
+    nb.cost <- intersect(1:m, nonbasic.index)
+    b.cost <- intersect(1:m, basic.index)
+    if(length(nb.cost) > 0){
+      for(i in 1:length(nb.cost)){
+        ub <- tab[1, (m+1):(m+n)] %*% const.matrix[, nb.cost[i]]
+        all.inc <- ub - obj.coeff[nb.cost[i]]
+        all.dec <- Inf
+        cost.coeff.sens <- rbind(
+          cost.coeff.sens, 
+          c(paste0("x", nb.cost[i]), all.dec, all.inc)
+        )
+      }
+    }
+    if(length(b.cost) > 0){
+      for(i in 1:length(b.cost)){
+        row.ind <- which(basic.index == b.cost[i]) + 1
+        lb <- c(-Inf)
+        ub <- c(Inf)
+        for(j in 1:length(nonbasic.index)){
+          if(sum(sign(c(tab[1, nonbasic.index[j]], tab[row.ind, nonbasic.index[j]]))) == 2){
+            lb <- c(lb, -(tab[1, nonbasic.index[j]]/tab[row.ind, nonbasic.index[j]]))
+          }
+          else{
+            ub <- c(ub, (tab[1, nonbasic.index[j]]/tab[row.ind, nonbasic.index[j]]))
+          }
+        }
+        lb.act <- abs(max(lb))
+        ub.act <- abs(min(ub))
+        cost.coeff.sens <- rbind(
+          cost.coeff.sens, 
+          c(paste0("x", b.cost[i]), lb.act, ub.act)
+        )
+      }
+    }
+    print(cost.coeff.sens)
+  }
+}
+
+bigmSimplex <- function(m, n, obj.coeff, const.matrix, const.signs, rhs){
+  bigm.val <- 10000
+  tab <- rbind(-obj.coeff, const.matrix)
+  slack.index <- c()
+  artificial.index <- c()
+  for(i in 1:n){
+    if(const.signs[i] == "<="){
+      temp.vect <- rep(0, n)
+      temp.vect[i] <- 1
+      slack.index <- c(slack.index, ncol(tab) + 1)
+      tab <- cbind(tab, c(0, temp.vect))
+    }
+    else if(const.signs[i] == "="){
+      temp.vect <- rep(0, n)
+      temp.vect[i] <- 1
+      artificial.index <- c(artificial.index, ncol(tab) + 1)
+      tab <- cbind(tab, c(bigm.val, temp.vect))
+    }
+    else if(const.signs[i] == ">="){
+      temp.vect <- rep(0, n)
+      temp.vect[i] <- -1
+      slack.index <- c(slack.index, ncol(tab) + 1)
+      artificial.index <- c(artificial.index, ncol(tab) + 2)
+      tab <- cbind(tab, c(0, temp.vect))
+      temp.vect[i] <- 1
+      tab <- cbind(tab, c(bigm.val, temp.vect))
+    }
+  }
+  tab <- cbind(tab, c(0, rhs))
+  artif.const.index <- which(const.signs == "=" | const.signs == ">=")
+  for(i in 1:length(artif.const.index)){
+    tab[1, ] <- tab[1, ] - bigm.val*tab[artif.const.index[i] + 1, ]
+  }
+  
+  basic.index <- which(tab[1, ] == 0)
+  nonbasic.index <- which(tab[1, ] != 0)
+  rownames(tab) <- c("Z", paste0("x", basic.index))
+  colnames(tab) <- c(paste0("x", 1:(ncol(tab) - 1)), "RHS")
+  print("The initial tableau is:")
+  print(tab)
+  print("The slack variables are:")
+  print(paste0("x", slack.index))
+  print("The artificial variabes are:")
+  print(paste0("x", artificial.index))
+  obj.row <- tab[1, 1:(ncol(tab) - 1)]
+  unbounded.flag <- 0
+  mult.optima.flag <- 0
+  while(sum(obj.row < 0) > 0){
+    piv.col.index <- which(obj.row == min(obj.row))[1]
+    piv.col <- tab[2:(n+1), piv.col.index]
+    rhs <- tab[2:(n+1), (ncol(tab))]
+    min.ratio.vect <- ifelse(
+      piv.col > 0,
+      rhs/piv.col,
+      10^10
+    )
+    if(min(min.ratio.vect) == 10^10){
+      unbounded.flag <- 1
+      break
+    }
+    if(length(which(min.ratio.vect == min(min.ratio.vect))) > 1){
+      print("DEGENERACY")
+    }
+    piv.row.index <- which(min.ratio.vect == min(min.ratio.vect))[1] + 1
+    piv.element <- tab[piv.row.index, piv.col.index]
+    tab[piv.row.index, ] <- tab[piv.row.index, ]/ piv.element
+    rest.row.index <- (1:(n + 1))[-piv.row.index]
+    for(i in rest.row.index){
+      tab[i, ] <- tab[i, ] - tab[i, piv.col.index]*tab[piv.row.index, ]
+    }
+    obj.row <- tab[1, 1:(ncol(tab) - 1)]
+    basic.index[piv.row.index-1] <- piv.col.index
+    nonbasic.index <- (1:(ncol(tab) - 1))[-basic.index]
+  }
+  final.tab <<- tab
+  rownames(tab) <- c("Z", paste0("x", basic.index))
+  colnames(tab) <- c(paste0("x", 1:(ncol(tab)-1)),"RHS")
+  check.vect <- intersect(basic.index, artificial.index)
+  infeasible.flag <- 0
+  if(length(check.vect > 0)){
+    for(i in 1:length(check.vect)){
+      artificial.check.index <- which(basic.index == check.vect[i]) + 1
+      if(tab[artificial.check.index, ncol(tab)] > 0){
+        infeasible.flag <- 1
+      }
+    }
+  }
+  if(infeasible.flag == 0){
+    if(unbounded.flag == 1){
+      print("UNBOUNDED")
+    } 
+    else {
+      if(mult.optima.flag == 1){
+        print("MULTIPLE OPTIMA")
+      }
+      print("The final tableau is:")
+      print(tab)
+      print("The basic variables are:")
+      print(paste0("x", basic.index))
+      print("The non-basic variables are:")
+      print(paste0("x", nonbasic.index))
+      print("The optimal objective value is:")
+      print(tab[1, (ncol(tab))])
+      soln.vect <- c(0)
+      soln.vect[nonbasic.index] <- 0
+      soln.vect[basic.index] <- tab[2:(n+1), (ncol(tab))]
+      print("The optimal solution is:")
+      names(soln.vect) <- paste0("x", 1:(ncol(tab) - 1))
+      print(soln.vect)
+    }
+  }
+  else{
+    print("INFEASIBLE")
+  }
+}
+
+if(sum(const.signs == "<=") == n){
+  conventionalSimplex(m, n, obj.coeff, const.matrix, rhs.orig) 
+}else{
+  bigmSimplex(m, n, obj.coeff, const.matrix, const.signs, rhs.orig)
+}
+
